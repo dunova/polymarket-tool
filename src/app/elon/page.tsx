@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardHeader, CardContent, StatCard, Badge, Button } from '@/components/ui';
 import { discoverElonMarkets, getMarketData } from '@/lib/api';
 import { getCSTDate, getMuskStatus, getTimeRemaining, formatPrice, formatPercent } from '@/lib/utils';
+import { useWebSocket } from '@/hooks/useWebSocket';
 
 interface Tracking {
     id: string;
@@ -56,6 +57,26 @@ export default function ElonTerminalPage() {
         }
     }, []);
 
+    // WebSocket price update handler
+    const handlePriceUpdate = useCallback((assetId: string, price: number) => {
+        setMarketData(prev => prev.map(m =>
+            m.assetId === assetId ? { ...m, yesPrice: price } : m
+        ));
+    }, []);
+
+    // Get asset IDs for WebSocket subscription
+    const assetIds = useMemo(() =>
+        marketData.filter(m => m.assetId).map(m => m.assetId as string),
+        [marketData]
+    );
+
+    // WebSocket for real-time updates
+    useWebSocket({
+        assetIds,
+        onPriceUpdate: handlePriceUpdate,
+        enabled: assetIds.length > 0,
+    });
+
     // Initial load
     useEffect(() => {
         async function init() {
@@ -68,7 +89,7 @@ export default function ElonTerminalPage() {
                     setActiveTracking(markets[0]);
                     setStatus('Loading Data...');
                     await loadData(markets[0]);
-                    setStatus('Ready');
+                    setStatus('Ready (Live)');
                 } else {
                     setStatus('No Markets Found');
                 }
@@ -88,10 +109,10 @@ export default function ElonTerminalPage() {
         return () => clearInterval(timer);
     }, []);
 
-    // Refresh data every 10 seconds
+    // Refresh data every 5 seconds (backup for WebSocket)
     useEffect(() => {
         if (!activeTracking) return;
-        const timer = setInterval(() => loadData(activeTracking), 10000);
+        const timer = setInterval(() => loadData(activeTracking), 5000);
         return () => clearInterval(timer);
     }, [activeTracking, loadData]);
 
