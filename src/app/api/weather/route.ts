@@ -7,6 +7,36 @@ const LONDON_LON = -0.1278;
 // Open-Meteo API (free, no key required)
 const OPEN_METEO_BASE = 'https://api.open-meteo.com/v1/forecast';
 
+const formatMinutes = (minutes: number) => {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+};
+
+const extractPeakTime = (times: string[], temps: number[]) => {
+    let peakTemp: number | null = null;
+    let peakTime: string | null = null;
+    let peakMinutes: number | null = null;
+
+    times.forEach((time, index) => {
+        const temp = temps[index];
+        if (temp === null || temp === undefined) return;
+        if (peakTemp === null || temp > peakTemp) {
+            peakTemp = temp;
+            const timePart = time.split('T')[1] || '';
+            const [hourStr, minuteStr] = timePart.split(':');
+            if (hourStr && minuteStr) {
+                const hour = parseInt(hourStr, 10);
+                const minute = parseInt(minuteStr, 10);
+                peakMinutes = hour * 60 + minute;
+                peakTime = formatMinutes(peakMinutes);
+            }
+        }
+    });
+
+    return { peakTemp, peakTime, peakMinutes };
+};
+
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') || 'forecast';
@@ -83,12 +113,13 @@ export async function GET(request: Request) {
         }
 
         if (type === 'historical-range') {
-            // Get Jan 12 historical data for past 10 years
+            const targetDate = date || new Date().toISOString().split('T')[0];
+            const [, month, day] = targetDate.split('-');
             const years = [];
             const currentYear = new Date().getFullYear();
 
             for (let y = currentYear - 10; y < currentYear; y++) {
-                const dateStr = `${y}-01-12`;
+                const dateStr = `${y}-${month}-${day}`;
                 years.push(dateStr);
             }
 
@@ -118,9 +149,60 @@ export async function GET(request: Request) {
 
             return NextResponse.json({
                 source: 'open-meteo-archive',
-                period: 'Jan 12 (10 years)',
+                period: `${month}-${day} (10 years)`,
                 data: results,
                 stats: { avg, max, min },
+            });
+        }
+
+        if (type === 'historical-peak-time') {
+            if (!date) {
+                return NextResponse.json({ error: 'Date parameter required' }, { status: 400 });
+            }
+
+            const [, month, day] = date.split('-');
+            const currentYear = new Date().getFullYear();
+            const years = [];
+
+            for (let y = currentYear - 30; y < currentYear; y++) {
+                years.push(y);
+            }
+
+            const results = await Promise.all(
+                years.map(async (year) => {
+                    const dateStr = `${year}-${month}-${day}`;
+                    try {
+                        const res = await fetch(
+                            `https://archive-api.open-meteo.com/v1/archive?latitude=${LONDON_LAT}&longitude=${LONDON_LON}&start_date=${dateStr}&end_date=${dateStr}&hourly=temperature_2m&timezone=Europe/London`,
+                            { next: { revalidate: 86400 } }
+                        );
+                        const data = await res.json();
+                        const hourlyTimes = data.hourly?.time || [];
+                        const hourlyTemps = data.hourly?.temperature_2m || [];
+                        const { peakTemp, peakTime, peakMinutes } = extractPeakTime(hourlyTimes, hourlyTemps);
+                        return { year, peakTime, peakTemp, peakMinutes };
+                    } catch {
+                        return { year, peakTime: null, peakTemp: null, peakMinutes: null };
+                    }
+                })
+            );
+
+            const validPeaks = results.filter(r => r.peakMinutes !== null);
+            const averageMinutes = validPeaks.length > 0
+                ? Math.round(validPeaks.reduce((sum, r) => sum + (r.peakMinutes as number), 0) / validPeaks.length)
+                : null;
+            const averageTime = averageMinutes !== null ? formatMinutes(averageMinutes) : null;
+            const last10 = results
+                .filter(r => r.year >= currentYear - 10)
+                .map(({ year, peakTime, peakTemp }) => ({ year, peakTime, peakTemp }));
+
+            return NextResponse.json({
+                source: 'open-meteo-archive',
+                date,
+                years: validPeaks.length,
+                averageMinutes,
+                averageTime,
+                last10,
             });
         }
 

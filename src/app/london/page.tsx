@@ -17,6 +17,13 @@ interface HistoricalData {
     stats: { avg: number | null; max: number | null; min: number | null };
 }
 
+interface PeakTimeData {
+    averageMinutes: number | null;
+    averageTime: string | null;
+    years: number;
+    last10: Array<{ year: number; peakTime: string | null; peakTemp: number | null }>;
+}
+
 interface OddsHistory {
     [key: string]: number[];
 }
@@ -106,6 +113,37 @@ const WEATHER_SOURCES = [
     { name: 'AccuWeather', url: 'https://www.accuweather.com/en/gb/london/ec4a-2/weather-forecast/328328', model: 'Global', temp: null as number | null },
     { name: 'BBC Weather', url: 'https://www.bbc.com/weather/2643743', model: 'Internal', temp: null as number | null },
 ];
+const LONDON_TIMEZONE = 'Europe/London';
+
+const getLondonTimeParts = (date: Date) => {
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: LONDON_TIMEZONE,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+    const parts = formatter.formatToParts(date);
+    const hour = parseInt(parts.find((p) => p.type === 'hour')?.value || '0', 10);
+    const minute = parseInt(parts.find((p) => p.type === 'minute')?.value || '0', 10);
+    return { hour, minute };
+};
+
+const formatLondonTime = (date: Date) => new Intl.DateTimeFormat('en-GB', {
+    timeZone: LONDON_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+}).format(date);
+
+const getSelectedDateIso = (dateLabel: string) => {
+    const match = dateLabel.match(/(\d+)月(\d+)日/);
+    if (!match) return new Date().toISOString().split('T')[0];
+    const month = match[1].padStart(2, '0');
+    const day = match[2].padStart(2, '0');
+    const year = new Date().getFullYear();
+    return `${year}-${month}-${day}`;
+};
+
 
 function getCountdown(): { h: number; m: number; s: number } {
     const now = new Date();
@@ -119,6 +157,8 @@ export default function LondonWeatherPage() {
     const [selectedDate, setSelectedDate] = useState<MarketDayConfig>(MARKETS_CONFIG[0]);
     const [weather, setWeather] = useState<WeatherData | null>(null);
     const [historical, setHistorical] = useState<HistoricalData | null>(null);
+    const [peakTimes, setPeakTimes] = useState<PeakTimeData | null>(null);
+    const [londonNow, setLondonNow] = useState(new Date());
     const [whaleData, setWhaleData] = useState<WhaleProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [countdown, setCountdown] = useState(getCountdown());
@@ -203,14 +243,21 @@ export default function LondonWeatherPage() {
     const loadData = useCallback(async () => {
         try {
             fetchAvailableMarkets(); // Update markets list in background
-            const [forecastRes, histRes, whaleRes] = await Promise.all([
+            const targetDate = getSelectedDateIso(selectedDate.date);
+            const [forecastRes, histRes, peakRes, whaleRes] = await Promise.all([
                 fetch('/api/weather?type=forecast'),
-                fetch('/api/weather?type=historical-range'),
+                fetch(`/api/weather?type=historical-range&date=${targetDate}`),
+                fetch(`/api/weather?type=historical-peak-time&date=${targetDate}`),
                 fetch(`/api/whale?address=${WHALE_ADDRESS}&type=profile`),
             ]);
             const weatherData = await forecastRes.json();
             setWeather(weatherData);
             setHistorical(await histRes.json());
+            if (peakRes.ok) {
+                setPeakTimes(await peakRes.json());
+            } else {
+                setPeakTimes(null);
+            }
             if (whaleRes.ok) {
                 const data = await whaleRes.json();
                 // Add mock data for the new UI fields if not provided by API
@@ -262,7 +309,7 @@ export default function LondonWeatherPage() {
             }
         } catch (e) { console.error(e); }
         finally { setLoading(false); }
-    }, [fetchMarketHistory, selectedDate.ranges]);
+    }, [fetchAvailableMarkets, fetchMarketHistory, selectedDate.date, selectedDate.ranges]);
 
     // Poll odds every 5 seconds (仅更新当前赔率)
     const pollOdds = useCallback(() => {
@@ -368,7 +415,10 @@ export default function LondonWeatherPage() {
         }, 60000));
 
         // Countdown Interval
-        timers.push(setInterval(() => setCountdown(getCountdown()), 1000));
+        timers.push(setInterval(() => {
+            setCountdown(getCountdown());
+            setLondonNow(new Date());
+        }, 1000));
 
         return () => timers.forEach(clearInterval);
     }, [loadData, pollOdds]); // Removed odds from dependencies
@@ -391,6 +441,14 @@ export default function LondonWeatherPage() {
     const confidence = weather && historical ?
         Math.abs((weather.forecastHigh || 0) - (historical.stats.avg || 0)) <= 1 ? 85 :
             Math.abs((weather.forecastHigh || 0) - (historical.stats.avg || 0)) <= 2 ? 65 : 40 : 0;
+    const londonTimeParts = getLondonTimeParts(londonNow);
+    const londonMinutes = londonTimeParts.hour * 60 + londonTimeParts.minute;
+    const averagePeakMinutes = peakTimes?.averageMinutes ?? null;
+    const peakWindowPassed = averagePeakMinutes !== null && londonMinutes >= averagePeakMinutes;
+    const oddsBelow90 = currentOdds !== null && currentOdds < 0.9;
+    const opportunitySignal = peakWindowPassed && oddsBelow90;
+    const londonTimeLabel = formatLondonTime(londonNow);
+    const deadlineLondonLabel = `${selectedDate.date} 23:59`;
 
     const formatWhaleSignal = (trade: { side?: string; outcome?: string; price?: number; size?: number; title?: string }) => {
         const match = trade.title?.match(/(\d+)°C/);
@@ -413,6 +471,14 @@ export default function LondonWeatherPage() {
                         <span className="font-mono text-lg font-bold text-[var(--warning)]" suppressHydrationWarning>
                             {countdown.h.toString().padStart(2, '0')}:{countdown.m.toString().padStart(2, '0')}:{countdown.s.toString().padStart(2, '0')}
                         </span>
+                    </div>
+
+                    {/* London Time */}
+                    <div className="flex items-center gap-2" suppressHydrationWarning>
+                        <span className="text-sm text-[var(--text-muted)]">伦敦时间:</span>
+                        <span className="font-mono text-lg font-bold">{londonTimeLabel}</span>
+                        <span className="text-sm text-[var(--text-muted)]">截止:</span>
+                        <span className="font-mono text-lg font-bold">{deadlineLondonLabel}</span>
                     </div>
 
                     {/* Stats */}
@@ -490,7 +556,20 @@ export default function LondonWeatherPage() {
                                             <p className="text-xs text-[var(--text-muted)]">Kelly</p>
                                             <p className="font-mono font-bold text-[var(--accent)]">37.5%</p>
                                         </div>
+                                        <div className="p-2 rounded bg-[var(--bg-base)]">
+                                            <p className="text-xs text-[var(--text-muted)]">高温窗口</p>
+                                            <p className={`font-mono font-bold ${peakWindowPassed ? 'text-[var(--success)]' : 'text-[var(--warning)]'}`}>{peakWindowPassed ? '已过' : '未过'}</p>
+                                        </div>
+                                        <div className="p-2 rounded bg-[var(--bg-base)]">
+                                            <p className="text-xs text-[var(--text-muted)]">赔率 &lt; 90%</p>
+                                            <p className={`font-mono font-bold ${oddsBelow90 ? 'text-[var(--success)]' : 'text-[var(--text-muted)]'}`}>{oddsBelow90 ? '是' : '否'}</p>
+                                        </div>
                                     </div>
+                                    {opportunitySignal && (
+                                        <div className="p-2 rounded bg-[var(--bg-base)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--success)]">
+                                            高温时间已过且赔率低于90%，可适当参与
+                                        </div>
+                                    )}
                                     <div className="flex gap-2">
                                         <a href={`https://polymarket.com/market/${selectedDate.eventSlug}-${range.slug}?buy=yes`}
                                             target="_blank" rel="noopener noreferrer"
@@ -722,6 +801,32 @@ export default function LondonWeatherPage() {
                             <div className="mt-2 p-2 rounded bg-[var(--accent-muted)] text-xs">
                                 <div className="flex justify-between"><span>10年均值:</span><span className="font-mono">{historical?.stats.avg?.toFixed(1)}°C</span></div>
                                 <div className="flex justify-between"><span>范围:</span><span className="font-mono">{historical?.stats.min?.toFixed(0)}~{historical?.stats.max?.toFixed(0)}°C</span></div>
+                            </div>
+                        </div>
+                    </Card>
+
+                    {/* Peak Time */}
+                    <Card variant="elevated">
+                        <CardHeader title="最高温出现时间" subtitle="30年均值 · 近10年记录" />
+                        <div className="p-3 pt-0 space-y-2 text-sm">
+                            <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-base)]">
+                                <span className="text-[var(--text-muted)]">30年平均</span>
+                                <span className="font-mono font-bold">{peakTimes?.averageTime || "--:--"}</span>
+                            </div>
+                            <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-base)]">
+                                <span className="text-[var(--text-muted)]">高温窗口</span>
+                                <Badge variant={peakWindowPassed ? "success" : "warning"}>{peakWindowPassed ? "已过" : "未过"}</Badge>
+                            </div>
+                            <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                                {peakTimes?.last10?.map((item) => (
+                                    <div key={item.year} className="flex items-center justify-between p-2 rounded bg-[var(--bg-base)]">
+                                        <span className="text-[var(--text-muted)]">{item.year}</span>
+                                        <span className="font-mono">{item.peakTime || "--:--"}</span>
+                                    </div>
+                                ))}
+                                {!peakTimes?.last10?.length && (
+                                    <div className="text-xs text-[var(--text-muted)]">暂无记录</div>
+                                )}
                             </div>
                         </div>
                     </Card>
