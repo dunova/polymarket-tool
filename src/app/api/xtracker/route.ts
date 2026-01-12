@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const XTRACKER_API_BASE = 'https://xtracker.polymarket.com';
+const XTRACKER_API_BASE = 'https://xtracker.polymarket.com/api';
 
 export async function GET(request: NextRequest) {
     try {

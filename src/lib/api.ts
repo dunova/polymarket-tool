@@ -29,7 +29,8 @@ export async function fetchClob(path: string, options?: RequestInit) {
 // Market discovery for Elon tweets
 export async function discoverElonMarkets() {
     try {
-        const data = await fetchXTracker('/api/trackings');
+        // Fixed: removed extra /api prefix
+        const data = await fetchXTracker('/trackings');
 
         if (!data.success || !data.data) {
             return [];
@@ -43,7 +44,13 @@ export async function discoverElonMarkets() {
 
         // Parse date ranges and fetch details
         const trackings = await Promise.all(
-            candidates.map(async (t: { title: string; polymarket_link?: string; id: string }) => {
+            candidates.map(async (t: {
+                title: string;
+                polymarket_link?: string;
+                id: string;
+                current_count?: number;
+                count?: number;
+            }) => {
                 const title = t.title;
                 // Match "Month Day - Month Day" OR "Month Day to Month Day"
                 const match = title.match(/(\w+)\s+(\d+)\s*(?:[-–]|to)\s*(\w+)\s+(\d+)/i);
@@ -62,7 +69,8 @@ export async function discoverElonMarkets() {
                             title: event.title || title,
                             startTime: new Date(`${m1} ${d1}, 2026`),
                             endTime: new Date(`${m2} ${d2}, 2026 23:59:59`),
-                            tweetCount: event.markets?.[0]?.volume || 0,
+                            // Fixed: Use actual tweet count from xtracker, not volume
+                            tweetCount: t.current_count || t.count || 0,
                             rawEvent: event,
                         };
                     }

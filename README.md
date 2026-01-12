@@ -1,36 +1,87 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Polymarket Tool Suite
 
-## Getting Started
+Professional toolkit for Polymarket prediction markets, featuring real-time monitoring, whale tracking, and advanced analytics.
 
-First, run the development server:
+[English](#english) | [中文](#中文)
+
+---
+
+<a name="english"></a>
+## 🚀 Features
+
+### 🐋 Whale Signals
+- Real-time tracking of large market movements.
+- Deep analysis of whale portfolios and historical performance.
+- Automated alerts for significant position changes.
+
+### 🐦 Elon Sniper & Terminal
+- Specialized monitoring for Musk-related markets (e.g., Tesla, X, Space-X).
+- High-frequency integration with social media signals.
+- Alpha discovery for event-driven trading.
+
+### 📊 Market Monitor & Intelligence
+- Comprehensive dashboard for trending events.
+- BTC range strategies and volatility analysis.
+- Multi-source data aggregation (Polymarket Gamma API, Weather APIs, etc.).
+
+### 👤 Trader AI Analyzer
+- Smart profiling of top-tier traders.
+- Win-rate analysis and PnL tracking.
+- Copy-trading intelligence and signal generation.
+
+## 🛠 Tech Stack
+- **Framework**: [Next.js 15+](https://nextjs.org/) (App Router)
+- **Language**: TypeScript
+- **Styling**: Vanilla CSS / Tailwind (Modern Glassmorphism Design)
+- **API**: Polymarket CLOB & Gamma API integration
+
+## 📦 Getting Started
 
 ```bash
+# Install dependencies
+npm install
+
+# Run development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+<a name="中文"></a>
+## 🚀 功能特性
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 🐋 巨鲸信号 (Whale Signals)
+- 实时追踪大额市场波动。
+- 深度分析巨鲸持仓组合及历史业绩。
+- 针对重大仓位变动的自动化提醒。
 
-## Learn More
+### 🐦 马斯克狙击手 & 终端 (Elon Sniper & Terminal)
+- 专注于马斯克相关市场（如 Tesla, X, SpaceX）的专项监控。
+- 与社交媒体信号的高频集成。
+- 捕捉事件驱动型交易的超额收益 (Alpha)。
 
-To learn more about Next.js, take a look at the following resources:
+### 📊 市场监控与情报 (Market Monitor)
+- 热门事件综合仪表盘。
+- BTC 区间策略与波动率分析。
+- 多源数据整合（Polymarket Gamma API, 天气 API 等）。
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 👤 交易员 AI 分析 (Trader AI Analyzer)
+- 对顶级交易员进行智能画像。
+- 胜率分析与 PnL 追踪。
+- 跟单交易情报与信号生成。
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🛠 技术栈
+- **框架**: [Next.js 15+](https://nextjs.org/) (App Router)
+- **语言**: TypeScript
+- **样式**: Vanilla CSS / Tailwind (现代毛玻璃设计风格)
+- **API**: 集成 Polymarket CLOB & Gamma API
 
-## Deploy on Vercel
+## 📦 快速开始
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+# 安装依赖
+npm install
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# 启动开发服务器
+npm run dev
+```

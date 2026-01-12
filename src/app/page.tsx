@@ -1,141 +1,182 @@
-import Link from 'next/link';
-import { Card, CardHeader, CardContent } from '@/components/ui';
+'use client';
 
-const tools = [
-  {
-    href: '/elon',
-    title: 'Elon Terminal',
-    description: 'Real-time tweet prediction with probability modeling and sleep pattern analysis.',
-    icon: '🐦',
-    gradient: 'from-blue-500 to-cyan-500',
-    stats: { label: 'Markets', value: 'Live' },
-  },
-  {
-    href: '/btc',
-    title: 'BTC Strategy',
-    description: 'Bitcoin price range predictions with market-based strategy backtesting.',
-    icon: '₿',
-    gradient: 'from-amber-500 to-orange-500',
-    stats: { label: 'Win Rate', value: '67%' },
-  },
-  {
-    href: '/trader',
-    title: 'Trader Analyzer',
-    description: 'Analyze whale traders, copy their positions, and track performance.',
-    icon: '🔍',
-    gradient: 'from-purple-500 to-pink-500',
-    stats: { label: 'Traders', value: '1.2K' },
-  },
-  {
-    href: '/monitor',
-    title: 'Market Monitor',
-    description: 'Live market monitoring with price alerts and volume tracking.',
-    icon: '📊',
-    gradient: 'from-green-500 to-emerald-500',
-    stats: { label: 'Status', value: 'Active' },
-  },
-];
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { Card, CardHeader, StatCard, Badge } from '@/components/ui';
+import { fetchGamma } from '@/lib/api';
+import { useTranslation } from '@/lib/i18n';
+
+interface TrendingMarket {
+  id: string;
+  title: string;
+  slug: string;
+  volume24hr: number;
+  liquidity: number;
+  bestAsk?: number;
+}
 
 export default function HomePage() {
+  const { t } = useTranslation();
+  const [trending, setTrending] = useState<TrendingMarket[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalVolume: 0,
+    activeMarkets: 0,
+    liquidity: 0,
+  });
+
+  const tools = [
+    { href: '/elon', label: t.home.tools.elon.label, desc: t.home.tools.elon.desc },
+    { href: '/btc', label: t.home.tools.btc.label, desc: t.home.tools.btc.desc },
+    { href: '/trader', label: t.home.tools.traders.label, desc: t.home.tools.traders.desc },
+    { href: '/monitor', label: t.home.tools.markets.label, desc: t.home.tools.markets.desc },
+  ];
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const events = await fetchGamma('/events?limit=10&active=true&order=volume24hr&ascending=false');
+
+        const markets = events.slice(0, 5).map((e: {
+          id: string;
+          title: string;
+          slug: string;
+          volume24hr: number;
+          liquidity: number;
+        }) => ({
+          id: e.id,
+          title: e.title,
+          slug: e.slug,
+          volume24hr: e.volume24hr || 0,
+          liquidity: e.liquidity || 0,
+        }));
+
+        setTrending(markets);
+        setStats({
+          totalVolume: events.reduce((sum: number, e: { volume24hr?: number }) => sum + (e.volume24hr || 0), 0),
+          activeMarkets: events.length,
+          liquidity: events.reduce((sum: number, e: { liquidity?: number }) => sum + (e.liquidity || 0), 0),
+        });
+      } catch (error) {
+        console.error('Failed to load data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
+
+  const formatNumber = (num: number) => {
+    if (num >= 1000000) return `$${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `$${(num / 1000).toFixed(1)}K`;
+    return `$${num.toFixed(0)}`;
+  };
+
   return (
-    <div className="max-w-7xl mx-auto px-6">
-      {/* Hero Section */}
-      <section className="text-center py-16">
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--surface)] text-sm text-[var(--text-secondary)] mb-6">
-          <span className="w-2 h-2 rounded-full bg-[var(--success)] animate-pulse" />
-          Real-time market data
-        </div>
+    <div className="max-w-[1600px] mx-auto px-4 py-6">
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-xl mb-1">{t.home.title}</h1>
+        <p className="text-sm text-[var(--text-muted)]">{t.home.subtitle}</p>
+      </div>
 
-        <h1 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-[var(--text-primary)] via-[var(--primary)] to-[var(--secondary)] bg-clip-text text-transparent">
-          Polymarket Tools
-        </h1>
+      {/* Stats Row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <StatCard
+          label={t.home.volume24h}
+          value={formatNumber(stats.totalVolume)}
+          loading={loading}
+        />
+        <StatCard
+          label={t.home.activeMarkets}
+          value={stats.activeMarkets.toString()}
+          loading={loading}
+        />
+        <StatCard
+          label={t.home.totalLiquidity}
+          value={formatNumber(stats.liquidity)}
+          loading={loading}
+        />
+        <StatCard
+          label={t.home.status}
+          value={t.common.online}
+          icon={<span className="status-dot online" />}
+          loading={loading}
+        />
+      </div>
 
-        <p className="text-xl text-[var(--text-secondary)] max-w-2xl mx-auto mb-10">
-          Professional trading dashboard for prediction markets. Real-time analytics,
-          alpha discovery, and automated strategies.
-        </p>
-
-        <div className="flex items-center justify-center gap-4">
-          <Link
-            href="/elon"
-            className="btn btn-primary px-8 py-3 text-base"
-          >
-            Launch Terminal
-          </Link>
-          <a
-            href="https://github.com/dunova/polymarket-tool"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-secondary px-8 py-3 text-base"
-          >
-            View Source
-          </a>
-        </div>
-      </section>
-
-      {/* Tools Grid */}
-      <section className="py-16">
-        <h2 className="text-2xl font-semibold text-center mb-12">Trading Tools</h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {tools.map((tool) => (
-            <Link key={tool.href} href={tool.href}>
-              <Card variant="interactive" className="h-full group">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${tool.gradient} flex items-center justify-center text-2xl`}>
-                      {tool.icon}
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-[var(--text-muted)] uppercase">{tool.stats.label}</p>
-                      <p className="text-lg font-semibold text-[var(--primary)]">{tool.stats.value}</p>
-                    </div>
-                  </div>
-
-                  <h3 className="text-xl font-semibold mb-2 group-hover:text-[var(--primary)] transition-colors">
-                    {tool.title}
-                  </h3>
-
-                  <p className="text-[var(--text-secondary)] text-sm">
-                    {tool.description}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Quick Access */}
+        <Card variant="elevated" className="lg:col-span-1">
+          <CardHeader title={t.home.quickAccess} />
+          <div className="space-y-2">
+            {tools.map((tool) => (
+              <Link
+                key={tool.href}
+                href={tool.href}
+                className="flex items-center justify-between p-3 rounded bg-[var(--bg-hover)] hover:bg-[var(--bg-surface)] transition-colors group"
+              >
+                <div>
+                  <p className="text-sm font-medium text-[var(--text-primary)] group-hover:text-[var(--primary)]">
+                    {tool.label}
                   </p>
-
-                  <div className="mt-4 flex items-center text-[var(--primary)] text-sm font-medium">
-                    Open Tool
-                    <svg className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      {/* Stats Section */}
-      <section className="py-16">
-        <Card className="p-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            <div className="text-center">
-              <p className="stat-value text-3xl">$2.1B</p>
-              <p className="stat-label mt-1">Trading Volume</p>
-            </div>
-            <div className="text-center">
-              <p className="stat-value text-3xl">1,200+</p>
-              <p className="stat-label mt-1">Active Markets</p>
-            </div>
-            <div className="text-center">
-              <p className="stat-value text-3xl">&lt;50ms</p>
-              <p className="stat-label mt-1">Data Latency</p>
-            </div>
-            <div className="text-center">
-              <p className="stat-value text-3xl">24/7</p>
-              <p className="stat-label mt-1">Live Updates</p>
-            </div>
+                  <p className="text-xs text-[var(--text-muted)]">{tool.desc}</p>
+                </div>
+                <svg className="w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--primary)] group-hover:translate-x-1 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            ))}
           </div>
         </Card>
-      </section>
+
+        {/* Trending Markets */}
+        <Card variant="elevated" className="lg:col-span-2">
+          <CardHeader
+            title={t.home.trendingMarkets}
+            subtitle={t.home.topByVolume}
+            action={
+              <Link href="/monitor" className="text-xs text-[var(--primary)] hover:underline">
+                {t.common.viewAll}
+              </Link>
+            }
+          />
+
+          {loading ? (
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="skeleton h-12 w-full" />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {trending.map((market, i) => (
+                <Link
+                  key={market.id}
+                  href={`https://polymarket.com/event/${market.slug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-3 rounded bg-[var(--bg-base)] hover:bg-[var(--bg-hover)] transition-colors group"
+                >
+                  <span className="text-xs font-mono text-[var(--text-muted)] w-5">
+                    {i + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-[var(--text-primary)] truncate group-hover:text-[var(--primary)]">
+                      {market.title}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <Badge variant="default">
+                      {formatNumber(market.volume24hr)} vol
+                    </Badge>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }
