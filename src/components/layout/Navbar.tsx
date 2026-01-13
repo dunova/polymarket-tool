@@ -11,14 +11,14 @@ export function Navbar() {
     const [time, setTime] = useState('--:--:--');
 
     const navItems = [
-        { href: '/', label: t.nav.dashboard },
-        { href: '/elon', label: t.nav.elon },
-        { href: '/btc', label: t.nav.btc },
-        { href: '/trader', label: t.nav.traders },
-        { href: '/monitor', label: t.nav.markets },
-        { href: '/london', label: t.nav.london },
-        { href: '/whale', label: '鲸鱼分析' },
+        { href: '/', label: '仪表盘' },
+        { href: '/elon', label: 'Elon推文' },
+        { href: '/btc', label: 'BTC' },
+        { href: '/traders', label: '交易员分析' },
+        { href: '/monitor', label: '市场监控' },
+        { href: '/london', label: 'London' },
     ];
+
 
     useEffect(() => {
         const updateTime = () => {
