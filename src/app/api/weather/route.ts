@@ -62,7 +62,7 @@ export async function GET(request: Request) {
             const hourlyTimes = data.hourly?.time || [];
             const hourlyTemps = data.hourly?.temperature_2m || [];
 
-            let todayMaxTemp = null;
+            let todayMaxTemp: number | null = null;
             let todayHourlyData: Array<{ time: string; temp: number }> = [];
 
             hourlyTimes.forEach((time: string, i: number) => {
@@ -189,7 +189,7 @@ export async function GET(request: Request) {
 
             const validPeaks = results.filter(r => r.peakMinutes !== null);
             const averageMinutes = validPeaks.length > 0
-                ? Math.round(validPeaks.reduce((sum, r) => sum + (r.peakMinutes as number), 0) / validPeaks.length)
+                ? Math.round(validPeaks.reduce((sum: number, r) => sum + (r.peakMinutes || 0), 0) / validPeaks.length)
                 : null;
             const averageTime = averageMinutes !== null ? formatMinutes(averageMinutes) : null;
             const last10 = results
