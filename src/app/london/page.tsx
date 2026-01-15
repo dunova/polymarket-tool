@@ -145,10 +145,17 @@ const getSelectedDateIso = (dateLabel: string, isoDate?: string) => {
 };
 
 
-function getCountdown(): { h: number; m: number; s: number } {
+function getCountdown(targetTime?: string): { h: number; m: number; s: number } {
     const now = new Date();
-    const deadline = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59));
-    if (now > deadline) deadline.setDate(deadline.getDate() + 1);
+    let deadline: Date;
+
+    if (targetTime) {
+        deadline = new Date(targetTime);
+    } else {
+        deadline = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59));
+        if (now > deadline) deadline.setDate(deadline.getDate() + 1);
+    }
+
     const diff = Math.max(0, deadline.getTime() - now.getTime());
     return { h: Math.floor(diff / 3600000), m: Math.floor((diff % 3600000) / 60000), s: Math.floor((diff % 60000) / 1000) };
 }
@@ -162,7 +169,7 @@ export default function LondonWeatherPage() {
     const [londonDayKey, setLondonDayKey] = useState(getLondonDateKey(new Date()));
     const [whaleData, setWhaleData] = useState<WhaleProfile | null>(null);
     // const [loading, setLoading] = useState(true);
-    const [countdown, setCountdown] = useState(getCountdown());
+    const [countdown, setCountdown] = useState(getCountdown(selectedDate.settlementTime));
     const [odds, setOdds] = useState<{ [key: string]: number }>({});
     const [oddsHistory, setOddsHistory] = useState<OddsHistory>({});
     const [lastUpdate, setLastUpdate] = useState(Date.now());
@@ -464,7 +471,8 @@ export default function LondonWeatherPage() {
     useEffect(() => {
         loadData();
         pollOdds();
-    }, [selectedDate.date, selectedDate.eventSlug, loadData, pollOdds]);
+        setCountdown(getCountdown(selectedDate.settlementTime));
+    }, [selectedDate.date, selectedDate.eventSlug, selectedDate.settlementTime, loadData, pollOdds]);
 
     // Setup periodic updates - Highly optimized
     useEffect(() => {
@@ -496,14 +504,14 @@ export default function LondonWeatherPage() {
         // Countdown Interval
         timers.push(setInterval(() => {
             const now = new Date();
-            setCountdown(getCountdown());
+            setCountdown(getCountdown(selectedDate.settlementTime));
             setLondonNow(now);
             const nextDayKey = getLondonDateKey(now);
             setLondonDayKey((prev) => (prev === nextDayKey ? prev : nextDayKey));
         }, 1000));
 
         return () => timers.forEach(clearInterval);
-    }, [fetchAvailableMarkets, loadData, pollOdds, selectedDate.ranges]);
+    }, [fetchAvailableMarkets, loadData, pollOdds, selectedDate.ranges, selectedDate.settlementTime]);
 
     // Whale tracking
     const handleNewTrade = useCallback((trade: WhaleTrade) => {
@@ -539,7 +547,16 @@ export default function LondonWeatherPage() {
     const oddsBelow90 = currentOdds !== null && currentOdds < 0.9;
     const opportunitySignal = peakWindowPassed && oddsBelow90;
     const londonTimeLabel = formatLondonTime(londonNow);
-    const deadlineLondonLabel = `${selectedDate.date} 23:59`;
+    const deadlineLondonLabel = selectedDate.settlementTime
+        ? new Date(selectedDate.settlementTime).toLocaleString('zh-CN', {
+            month: 'numeric',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+            timeZone: 'Europe/London'
+        }).replace(/\//g, '月').replace(/ /, '日 ').replace(/,/, '')
+        : `${selectedDate.date} 23:59`;
     const formattedVolume = selectedDate.volume > 0
         ? new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(selectedDate.volume)
         : '--';

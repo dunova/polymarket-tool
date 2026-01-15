@@ -16,6 +16,7 @@ export interface LondonMarketConfig {
     closed: boolean;
     volume: number;
     ranges: LondonMarketRange[];
+    settlementTime?: string; // ISO string
 }
 
 interface LondonMarketEvent {
@@ -95,38 +96,39 @@ export const buildLondonMarketConfigs = (events: LondonMarketEvent[], now: Date,
     const todayKey = getLondonDateKey(now);
     const colors = ['#3b82f6', '#8b5cf6', '#06b6d4', '#22c55e', '#eab308', '#f97316', '#ef4444'];
 
-    const configs = events
-        .map((event) => {
-            if (!event.slug) return null;
-            const eventDate = getEventDate(event);
-            if (!eventDate) return null;
-            const isoDate = getLondonDateKey(eventDate);
-            const dateLabel = getLondonDateLabel(eventDate);
-            const dayNum = parseInt(isoDate.split('-')[2] || '0', 10);
+    const rawConfigs = events.map((event) => {
+        if (!event.slug) return null;
+        const eventDate = getEventDate(event);
+        if (!eventDate) return null;
+        const isoDate = getLondonDateKey(eventDate);
+        const dateLabel = getLondonDateLabel(eventDate);
+        const dayNum = parseInt(isoDate.split('-')[2] || '0', 10);
 
-            const ranges = (event.markets || []).map((market, index) => ({
-                label: market.groupItemTitle || extractRangeLabel(market.question),
-                slug: market.slug?.split('-').pop() || '',
-                color: colors[index % colors.length],
-                tokenId: parseTokenId(market.clobTokenIds),
-            }));
+        const ranges: LondonMarketRange[] = (event.markets || []).map((market, index) => ({
+            label: market.groupItemTitle || extractRangeLabel(market.question),
+            slug: market.slug?.split('-').pop() || '',
+            color: colors[index % colors.length],
+            tokenId: parseTokenId(market.clobTokenIds),
+        }));
 
-            const volume = event.volume !== undefined
-                ? parseVolume(event.volume)
-                : (event.markets || []).reduce((sum, market) => sum + parseVolume(market.volume), 0);
+        const volume = event.volume !== undefined
+            ? parseVolume(event.volume)
+            : (event.markets || []).reduce((sum, market) => sum + parseVolume(market.volume), 0);
 
-            return {
-                date: dateLabel,
-                isoDate,
-                dayNum,
-                eventSlug: event.slug,
-                eventUrl: `https://polymarket.com/event/${event.slug}`,
-                closed: Boolean(event.closed),
-                volume,
-                ranges,
-            };
-        })
-        .filter((value): value is LondonMarketConfig => value !== null)
+        return {
+            date: dateLabel,
+            isoDate,
+            dayNum,
+            eventSlug: event.slug,
+            eventUrl: `https://polymarket.com/event/${event.slug}`,
+            closed: Boolean(event.closed),
+            volume,
+            ranges,
+            settlementTime: event.endDate || event.startDate,
+        };
+    });
+
+    const configs: LondonMarketConfig[] = (rawConfigs.filter(c => c !== null) as LondonMarketConfig[])
         .filter((config) => config.isoDate >= todayKey)
         .sort((a, b) => a.isoDate.localeCompare(b.isoDate));
 
