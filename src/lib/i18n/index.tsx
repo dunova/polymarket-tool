@@ -21,14 +21,15 @@ const I18nContext = createContext<I18nContextType>({
 });
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-    const [language, setLanguageState] = useState<Language>('zh');
-
-    useEffect(() => {
-        const saved = localStorage.getItem('language') as Language;
-        if (saved && (saved === 'en' || saved === 'zh')) {
-            setLanguageState(saved);
+    const [language, setLanguageState] = useState<Language>(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem('language') as Language;
+            if (saved && (saved === 'en' || saved === 'zh')) {
+                return saved;
+            }
         }
-    }, []);
+        return 'zh';
+    });
 
     const setLanguage = (lang: Language) => {
         setLanguageState(lang);
@@ -36,10 +37,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     };
 
     return (
-        <I18nContext.Provider value= {{ language, setLanguage, t: translations[language] }
-}>
-    { children }
-    </I18nContext.Provider>
+        <I18nContext.Provider value={{ language, setLanguage, t: translations[language] }
+        }>
+            {children}
+        </I18nContext.Provider>
     );
 }
 
@@ -56,14 +57,14 @@ export function LanguageToggle() {
 
     return (
         <button
-            onClick= {() => setLanguage(language === 'en' ? 'zh' : 'en')
-}
-className = "flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
-    >
-    <svg className="w-3.5 h-3.5" fill = "none" viewBox = "0 0 24 24" stroke = "currentColor" >
-        <path strokeLinecap="round" strokeLinejoin = "round" strokeWidth = { 2} d = "M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+            onClick={() => setLanguage(language === 'en' ? 'zh' : 'en')
+            }
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+        >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
             </svg>
-{ language === 'en' ? '中文' : 'EN' }
-</button>
+            {language === 'en' ? '中文' : 'EN'}
+        </button>
     );
 }

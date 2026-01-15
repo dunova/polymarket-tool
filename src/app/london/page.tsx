@@ -3,12 +3,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardHeader, Badge, Button } from '@/components/ui';
 import { useWhaleTracker, WhaleTrade } from '@/hooks/useWhaleTracker';
+import { buildLondonMarketConfigs, getLondonDateKey, LondonMarketConfig } from '@/lib/londonMarkets';
 
 interface WeatherData {
     source: string;
     model: string;
     current: { temperature: number; weathercode: number; time: string };
     forecastHigh: number | null;
+    avgMax?: number | null;
+    models?: Array<{ name: string; max: number | null; model?: string }>;
     hourly: Array<{ time: string; temp: number }>;
 }
 
@@ -51,64 +54,60 @@ interface WhaleProfile {
             predictions: number;
         };
     };
-    recentTrades: Array<{ outcome?: string; side?: string; price?: number; size?: number; timestamp?: string; title?: string; type?: string }>;
+    recentTrades: Array<{ outcome?: string; side?: string; price?: number; size?: number; timestamp?: string; title?: string; market?: string; type?: string }>;
 }
 
 const WHALE_ADDRESS = '0x8278252ebbf354eca8ce316e680a0eaf02859464';
 const WHALE_DISPLAY = '@0xf2e346ab';
+const CURRENT_YEAR = new Date().getFullYear();
 
-interface MarketDayConfig {
-    date: string;
-    eventSlug: string;
-    ranges: Array<{ label: string; slug: string; color: string; tokenId: string }>;
-}
+type MarketDayConfig = LondonMarketConfig;
 
-const MARKETS_CONFIG: MarketDayConfig[] = [
-    {
-        date: '1月12日',
-        eventSlug: 'highest-temperature-in-london-on-january-12',
-        ranges: [
-            { label: '9°C', slug: '9c', color: '#3b82f6', tokenId: '102990858798277779624931988639833714420844057989328797261129261022087066662446' },
-            { label: '10°C', slug: '10c', color: '#8b5cf6', tokenId: '9183801721331929593065160420469303431451946810355691788595316889212225798170' },
-            { label: '11°C', slug: '11c', color: '#06b6d4', tokenId: '1360718069679566878994454842173456385978878208897723128225522036482908084430' },
-            { label: '12°C', slug: '12c', color: '#22c55e', tokenId: '48217551877252079327770873926307812812984640739950952204942733528019134433796' },
-            { label: '13°C', slug: '13c', color: '#eab308', tokenId: '6733081895047665277553406079337464689327501800463850167678221258681398910365' },
-            { label: '14°C', slug: '14c', color: '#f97316', tokenId: '114968791596878287946432444985380111447303194868831047205520866237878564618904' },
-            { label: '15°C+', slug: '15c-or-higher', color: '#ef4444', tokenId: '85641159246954541801206350597679451488919105590575756157913393489931368432888' },
-        ],
-    },
-    {
-        date: '1月13日',
-        eventSlug: 'highest-temperature-in-london-on-january-13',
-        ranges: [
-            { label: '7°C↓', slug: '7c-or-below', color: '#3b82f6', tokenId: '15282834548052057943513008437832420110584432700816996962332239652620317644769' },
-            { label: '8°C', slug: '8c', color: '#8b5cf6', tokenId: '73848826338911777613762723951828017915203666123947426093508594019728400162081' },
-            { label: '9°C', slug: '9c', color: '#06b6d4', tokenId: '46831419500053751458273429485730483387068760633938135136788437854529249345877' },
-            { label: '10°C', slug: '10c', color: '#22c55e', tokenId: '59389045887002199579698667658466367093197369968850232585217139336473044234280' },
-            { label: '11°C', slug: '11c', color: '#eab308', tokenId: '7356307011981026568669537659612239437555206533212061948068634226384443169593' },
-            { label: '12°C', slug: '12c', color: '#f97316', tokenId: '90763240667977821921806360874406904156074511787984161846127055674824368222907' },
-            { label: '13°C+', slug: '13c-or-higher', color: '#ef4444', tokenId: '19413654933294061956606019382538103829885098799382561523064594803528434207984' },
-        ],
-    },
-    {
-        date: '1月14日',
-        eventSlug: 'highest-temperature-in-london-on-january-14',
-        ranges: [
-            { label: '3°C↓', slug: '3c-or-below', color: '#3b82f6', tokenId: '13043258036246970379638689654812370817891541146665460260296134001827976117553' },
-            { label: '4°C', slug: '4c', color: '#8b5cf6', tokenId: '115243890092200085743581964763089626553316711411773289440966721230746172461104' },
-            { label: '5°C', slug: '5c', color: '#06b6d4', tokenId: '89323344442234115551116143682928410708618588446478674218190074341899627848421' },
-            { label: '6°C', slug: '6c', color: '#22c55e', tokenId: '112115388297038366609462186241797671123460888537511885110100424813248169639334' },
-            { label: '7°C', slug: '7c', color: '#eab308', tokenId: '76663391279802253019904078094867228539000543980767877163628154568210460965884' },
-            { label: '8°C', slug: '8c', color: '#f97316', tokenId: '23406310448732242439010190756189196018380690042410642297500062628606412065671' },
-            { label: '9°C+', slug: '9c-or-higher', color: '#ef4444', tokenId: '3478065777953472587600462299995507478516852414248246196496401038706188246792' },
-        ],
-    },
-];
+// Dynamic fallback: generate configs for today and next 2 days
+const generateFallbackConfig = (): MarketDayConfig[] => {
+    const now = new Date();
+    const configs: MarketDayConfig[] = [];
+    const colors = ['#3b82f6', '#8b5cf6', '#06b6d4', '#22c55e', '#eab308', '#f97316', '#ef4444'];
 
-const WEATHER_SOURCES = [
+    for (let i = 0; i < 3; i++) {
+        const date = new Date(now);
+        date.setDate(date.getDate() + i);
+        const month = date.getMonth() + 1;
+        const day = date.getDate();
+        const year = date.getFullYear();
+        const isoDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+        const monthSlug = monthNames[month - 1];
+
+        configs.push({
+            date: `${month}月${day}日`,
+            isoDate,
+            dayNum: day,
+            eventSlug: `highest-temperature-in-london-on-${monthSlug}-${day}`,
+            eventUrl: `https://polymarket.com/event/highest-temperature-in-london-on-${monthSlug}-${day}`,
+            closed: i === 0 ? false : false, // Current day is not closed
+            volume: 0,
+            ranges: [
+                { label: '8°C↓', slug: '8c-or-below', color: colors[0], tokenId: '' },
+                { label: '9°C', slug: '9c', color: colors[1], tokenId: '' },
+                { label: '10°C', slug: '10c', color: colors[2], tokenId: '' },
+                { label: '11°C', slug: '11c', color: colors[3], tokenId: '' },
+                { label: '12°C', slug: '12c', color: colors[4], tokenId: '' },
+                { label: '13°C', slug: '13c', color: colors[5], tokenId: '' },
+                { label: '14°C+', slug: '14c-or-higher', color: colors[6], tokenId: '' },
+            ],
+        });
+    }
+    return configs;
+};
+
+const MARKETS_CONFIG: MarketDayConfig[] = generateFallbackConfig();
+
+
+const FALLBACK_WEATHER_SOURCES = [
     { name: 'Apple Weather', url: 'https://weather.apple.com/', model: 'Apple Weather', temp: null as number | null },
     { name: 'Open-Meteo UKMO', url: 'https://open-meteo.com/', model: 'UKMO 2km', temp: null as number | null },
-    { name: 'Weather Underground', url: 'https://www.wunderground.com/weather/gb/london/EGLC', model: 'Official', temp: 11.7 },
+    { name: 'Weather Underground', url: 'https://www.wunderground.com/weather/gb/london/EGLC', model: 'Official', temp: null as number | null },
     { name: 'Met Office', url: 'https://www.metoffice.gov.uk/weather/forecast/gcpvj0v07', model: 'UK Model', temp: null as number | null },
     { name: 'AccuWeather', url: 'https://www.accuweather.com/en/gb/london/ec4a-2/weather-forecast/328328', model: 'Global', temp: null as number | null },
     { name: 'BBC Weather', url: 'https://www.bbc.com/weather/2643743', model: 'Internal', temp: null as number | null },
@@ -135,12 +134,13 @@ const formatLondonTime = (date: Date) => new Intl.DateTimeFormat('en-GB', {
     hour12: false,
 }).format(date);
 
-const getSelectedDateIso = (dateLabel: string) => {
+const getSelectedDateIso = (dateLabel: string, isoDate?: string) => {
+    if (isoDate) return isoDate;
     const match = dateLabel.match(/(\d+)月(\d+)日/);
     if (!match) return new Date().toISOString().split('T')[0];
     const month = match[1].padStart(2, '0');
     const day = match[2].padStart(2, '0');
-    const year = new Date().getFullYear();
+    const year = CURRENT_YEAR;
     return `${year}-${month}-${day}`;
 };
 
@@ -159,13 +159,15 @@ export default function LondonWeatherPage() {
     const [historical, setHistorical] = useState<HistoricalData | null>(null);
     const [peakTimes, setPeakTimes] = useState<PeakTimeData | null>(null);
     const [londonNow, setLondonNow] = useState(new Date());
+    const [londonDayKey, setLondonDayKey] = useState(getLondonDateKey(new Date()));
     const [whaleData, setWhaleData] = useState<WhaleProfile | null>(null);
-    const [loading, setLoading] = useState(true);
+    // const [loading, setLoading] = useState(true);
     const [countdown, setCountdown] = useState(getCountdown());
     const [odds, setOdds] = useState<{ [key: string]: number }>({});
     const [oddsHistory, setOddsHistory] = useState<OddsHistory>({});
     const [lastUpdate, setLastUpdate] = useState(Date.now());
     const [realtimeTrades, setRealtimeTrades] = useState<WhaleTrade[]>([]);
+    const [isChartLoading, setIsChartLoading] = useState(false);
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const oddsRef = useRef<{ [key: string]: number }>({});
@@ -173,11 +175,11 @@ export default function LondonWeatherPage() {
     // Fetch historical price data for a tokenId
     const fetchMarketHistory = useCallback(async (tokenId: string, startTs: number) => {
         try {
-            const url = `https://clob.polymarket.com/prices-history?market=${tokenId}&startTs=${startTs}&fidelity=15`;
+            const url = `/api/clob/prices-history?market=${tokenId}&startTs=${startTs}&fidelity=15`;
             const res = await fetch(url);
             if (!res.ok) return [];
             const data = await res.json();
-            return (data.history || []).map((p: any) => p.p);
+            return (data.history || []).map((p: { p: number }) => p.p);
         } catch (e) {
             console.error(`Failed to fetch history for ${tokenId}:`, e);
             return [];
@@ -185,73 +187,72 @@ export default function LondonWeatherPage() {
     }, []);
 
     // Dynamically fetch London weather events
-    const [availableMarkets, setAvailableMarkets] = useState<MarketDayConfig[]>(MARKETS_CONFIG);
+    const [availableMarkets, setAvailableMarkets] = useState<MarketDayConfig[]>([]);
+    const [isMarketsLoading, setIsMarketsLoading] = useState(true);
 
     const fetchAvailableMarkets = useCallback(async () => {
+        setIsMarketsLoading(true);
         try {
-            const response = await fetch('https://gamma-api.polymarket.com/events?series_id=10006&active=true');
-            if (!response.ok) return;
+            // Use internal proxy to bypass CORS
+            const response = await fetch('/api/weather?type=markets');
+            if (!response.ok) throw new Error('API request failed');
             const events = await response.json();
 
-            const newMarkets: MarketDayConfig[] = events
-                .filter((e: any) => e.slug.includes('highest-temperature-in-london'))
-                .map((e: any) => {
-                    // Extract date from slug or title
-                    const dateMatch = e.title.match(/January (\d+)/i);
-                    const day = dateMatch ? dateMatch[1] : '';
+            if (!Array.isArray(events)) {
+                console.error('Expected array of events, got:', events);
+                setAvailableMarkets(MARKETS_CONFIG);
+                return;
+            }
 
-                    return {
-                        date: `1月${day}日`,
-                        eventSlug: e.slug,
-                        ranges: e.markets.map((m: any) => ({
-                            label: m.groupItemTitle || m.question.match(/be (.*)\?/)?.[1] || 'Unknown',
-                            slug: m.slug.split('-').pop() || '',
-                            color: '#3b82f6', // Default color, will be mapped below
-                            tokenId: m.clobTokenIds ? JSON.parse(m.clobTokenIds)[0] : ''
-                        }))
-                    };
-                });
+            const newMarkets: MarketDayConfig[] = Array.isArray(events)
+                ? buildLondonMarketConfigs(events, new Date())
+                : [];
 
             if (newMarkets.length > 0) {
-                // Sort by day number
-                newMarkets.sort((a, b) => {
-                    const dayA = parseInt(a.date.match(/\d+/)?.[0] || '0');
-                    const dayB = parseInt(b.date.match(/\d+/)?.[0] || '0');
-                    return dayA - dayB;
-                });
-
-                // Apply standard colors and refine labels
-                newMarkets.forEach(m => {
-                    m.ranges.forEach((r, i) => {
-                        const colors = ['#3b82f6', '#8b5cf6', '#06b6d4', '#22c55e', '#eab308', '#f97316', '#ef4444'];
-                        r.color = colors[i % colors.length];
-                    });
-                });
-
+                newMarkets.sort((a, b) => a.isoDate.localeCompare(b.isoDate));
                 setAvailableMarkets(newMarkets);
-                // If current selected date isn't in new markets, default to first available
-                if (!newMarkets.find(m => m.eventSlug === selectedDate.eventSlug)) {
+
+                const marketExists = newMarkets.find(m => m.eventSlug === selectedDate.eventSlug);
+                if (!marketExists) {
                     setSelectedDate(newMarkets[0]);
+                }
+            } else {
+                // Fallback to static config if API returns no results
+                setAvailableMarkets(MARKETS_CONFIG);
+                if (!MARKETS_CONFIG.find(m => m.eventSlug === selectedDate.eventSlug)) {
+                    setSelectedDate(MARKETS_CONFIG[MARKETS_CONFIG.length - 1]);
                 }
             }
         } catch (e) {
             console.error('Failed to fetch available markets:', e);
+            // Fallback to static config on error
+            setAvailableMarkets(MARKETS_CONFIG);
+        } finally {
+            setIsMarketsLoading(false);
         }
     }, [selectedDate.eventSlug]);
 
+    useEffect(() => {
+        fetchAvailableMarkets();
+    }, [fetchAvailableMarkets, londonDayKey]);
+
     // Load data
     const loadData = useCallback(async () => {
+        setIsChartLoading(true);
         try {
-            fetchAvailableMarkets(); // Update markets list in background
-            const targetDate = getSelectedDateIso(selectedDate.date);
+            const targetDate = getSelectedDateIso(selectedDate.date, selectedDate.isoDate);
+
+            // Sync weather with selectedDate
             const [forecastRes, histRes, peakRes, whaleRes] = await Promise.all([
-                fetch('/api/weather?type=forecast'),
+                fetch(`/api/weather?type=forecast&date=${targetDate}`),
                 fetch(`/api/weather?type=historical-range&date=${targetDate}`),
                 fetch(`/api/weather?type=historical-peak-time&date=${targetDate}`),
                 fetch(`/api/whale?address=${WHALE_ADDRESS}&type=profile`),
             ]);
+
             const weatherData = await forecastRes.json();
             setWeather(weatherData);
+
             setHistorical(await histRes.json());
             if (peakRes.ok) {
                 setPeakTimes(await peakRes.json());
@@ -280,21 +281,28 @@ export default function LondonWeatherPage() {
             }
 
             // Initialize oddsHistory from real API
-            const oneDayAgo = Math.floor(Date.now() / 1000) - 86400;
+            // Start history from 24h ago to show a trend for active markets
+            const nowTs = Math.floor(Date.now() / 1000);
+            const targetDateObj = new Date(targetDate + 'T00:00:00Z');
+            const targetMidnightTs = Math.floor(targetDateObj.getTime() / 1000);
+
+            // If the market is in the future or today, show last 24h.
+            // If it's in the past, show that day's history.
+            const startTs = targetMidnightTs > nowTs - 86400 ? nowTs - 86400 : targetMidnightTs;
             const historyMap: OddsHistory = {};
 
             await Promise.all(selectedDate.ranges.map(async (range) => {
-                const prices = await fetchMarketHistory(range.tokenId, oneDayAgo);
+                const prices = await fetchMarketHistory(range.tokenId, startTs);
                 if (prices.length > 0) {
                     historyMap[range.label] = prices;
                 } else {
-                    historyMap[range.label] = Array(96).fill(0); // fallback for 15m fidelity
+                    historyMap[range.label] = Array(96).fill(0); // fallback
                 }
             }));
 
             setOddsHistory(historyMap);
 
-            // Set initial odds for logic
+            // Initial odds
             const initialOdds: { [key: string]: number } = {};
             selectedDate.ranges.forEach(r => {
                 const h = historyMap[r.label];
@@ -302,30 +310,20 @@ export default function LondonWeatherPage() {
             });
             setOdds(initialOdds);
             oddsRef.current = initialOdds;
-
-            // Update weather sources with Open-Meteo data
-            if (weatherData?.forecastHigh) {
-                WEATHER_SOURCES[0].temp = weatherData.forecastHigh;
-            }
         } catch (e) { console.error(e); }
-        finally { setLoading(false); }
-    }, [fetchAvailableMarkets, fetchMarketHistory, selectedDate.date, selectedDate.ranges]);
-
-    // Poll odds every 5 seconds (仅更新当前赔率)
-    const pollOdds = useCallback(() => {
-        const newOdds: { [key: string]: number } = {};
-        for (const r of selectedDate.ranges) {
-            const current = oddsRef.current[r.label] || 0.1;
-            const variation = (Math.random() - 0.5) * 0.004;
-            newOdds[r.label] = Math.max(0.001, Math.min(0.999, current + variation));
+        finally {
+            // setLoading(false);
+            setIsChartLoading(false);
         }
+    }, [fetchAvailableMarkets, fetchMarketHistory, selectedDate.date, selectedDate.ranges, selectedDate.isoDate]);
 
-        setOdds(newOdds);
-        oddsRef.current = newOdds; // 存储用于走势图采样
+    const pollOdds = useCallback(() => {
+        // In a real app, this would fetch the current midpoint from CLOB for each tokenId.
+        // For now, we maintain the current values fetched by loadData.
         setLastUpdate(Date.now());
-    }, [selectedDate.ranges]);
+    }, []);
 
-    // Draw unified odds chart
+    // Draw unified odds chart with temperature overlay
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -335,27 +333,35 @@ export default function LondonWeatherPage() {
 
         const width = canvas.width;
         const height = canvas.height;
-        const padding = { top: 20, right: 10, bottom: 25, left: 40 };
+        const padding = { top: 20, right: 50, bottom: 25, left: 40 };
         const chartWidth = width - padding.left - padding.right;
         const chartHeight = height - padding.top - padding.bottom;
 
         ctx.clearRect(0, 0, width, height);
 
-        // Grid Lines & Labels
+        // Grid Lines & Labels (100% max scale)
         ctx.strokeStyle = '#2d2d2d';
         ctx.fillStyle = '#666666';
         ctx.font = '10px Inter, system-ui';
         ctx.textAlign = 'right';
         ctx.lineWidth = 1;
 
-        const yTicks = [0, 0.15, 0.30, 0.45, 0.60];
+        const yTicks = [0, 0.25, 0.50, 0.75, 1.00];
         yTicks.forEach(tick => {
-            const y = padding.top + chartHeight - (tick / 0.6) * chartHeight;
+            const y = padding.top + chartHeight - tick * chartHeight;
             ctx.beginPath();
             ctx.moveTo(padding.left, y);
             ctx.lineTo(width - padding.right, y);
             ctx.stroke();
             ctx.fillText(`${(tick * 100).toFixed(0)}%`, padding.left - 5, y + 3);
+        });
+
+        // Right Y-axis for temperature (0-20°C)
+        ctx.textAlign = 'left';
+        const tempTicks = [0, 5, 10, 15, 20];
+        tempTicks.forEach(temp => {
+            const y = padding.top + chartHeight - (temp / 20) * chartHeight;
+            ctx.fillText(`${temp}°C`, width - padding.right + 5, y + 3);
         });
 
         // X-axis Time Labels (Simple logic for 24h)
@@ -374,28 +380,101 @@ export default function LondonWeatherPage() {
             ctx.strokeStyle = range.color;
             ctx.lineWidth = 1.5;
             ctx.lineJoin = 'round';
+            ctx.setLineDash([]);
             ctx.beginPath();
 
             history.forEach((val, i) => {
                 const x = padding.left + (i / (history.length - 1)) * chartWidth;
-                const y = padding.top + chartHeight - (val / 0.6) * chartHeight;
+                const y = padding.top + chartHeight - val * chartHeight;
                 if (i === 0) ctx.moveTo(x, y);
                 else ctx.lineTo(x, y);
             });
 
             ctx.stroke();
         });
-    }, [oddsHistory, selectedDate.ranges]);
+
+        // Draw hourly temperature overlay
+        const hourlyData = weather?.hourly || [];
+        if (hourlyData.length > 0) {
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 3]); // Dashed line
+            ctx.beginPath();
+
+            let maxTemp = -Infinity;
+            let maxTempX = 0;
+            let maxTempY = 0;
+
+            hourlyData.forEach((point: { time: string; temp: number }, i: number) => {
+                // Normalize temperature: 0-20°C maps to 0-100%
+                const normalizedTemp = Math.max(0, Math.min(1, point.temp / 20));
+                const x = padding.left + (i / (hourlyData.length - 1)) * chartWidth;
+                const y = padding.top + chartHeight - normalizedTemp * chartHeight;
+
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+
+                // Track max temperature point
+                if (point.temp > maxTemp) {
+                    maxTemp = point.temp;
+                    maxTempX = x;
+                    maxTempY = y;
+                }
+            });
+
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset
+
+            // Draw max temperature annotation
+            if (maxTemp > -Infinity) {
+                // Circle marker
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath();
+                ctx.arc(maxTempX, maxTempY, 5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // White border
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Label background
+                const label = `${maxTemp.toFixed(1)}°C`;
+                ctx.font = 'bold 11px Inter, system-ui';
+                const labelWidth = ctx.measureText(label).width + 8;
+                const labelHeight = 18;
+                const labelX = maxTempX - labelWidth / 2;
+                const labelY = maxTempY - 20;
+
+                ctx.fillStyle = 'rgba(239, 68, 68, 0.9)';
+                ctx.beginPath();
+                ctx.roundRect(labelX, labelY - labelHeight / 2, labelWidth, labelHeight, 4);
+                ctx.fill();
+
+                // Label text
+                ctx.fillStyle = '#ffffff';
+                ctx.textAlign = 'center';
+                ctx.fillText(label, maxTempX, labelY + 4);
+            }
+        }
+    }, [oddsHistory, selectedDate.ranges, weather?.hourly]);
 
     // Setup periodic updates - Optimized to avoid duplicate intervals
+    // Initial load and dependency-based updates
     useEffect(() => {
         loadData();
         pollOdds();
+    }, [selectedDate.date, selectedDate.eventSlug, loadData, pollOdds]);
 
+    // Setup periodic updates - Highly optimized
+    useEffect(() => {
         const timers: NodeJS.Timeout[] = [];
 
-        // Data Load Interval (1 min)
-        timers.push(setInterval(loadData, 60000));
+        // Market List Update (every 1 hour)
+        timers.push(setInterval(fetchAvailableMarkets, 3600000));
+
+        // Weather & Profile Update (every 15 mins)
+        timers.push(setInterval(loadData, 900000));
 
         // Odds Polling Interval (5 sec)
         timers.push(setInterval(pollOdds, 5000));
@@ -416,31 +495,43 @@ export default function LondonWeatherPage() {
 
         // Countdown Interval
         timers.push(setInterval(() => {
+            const now = new Date();
             setCountdown(getCountdown());
-            setLondonNow(new Date());
+            setLondonNow(now);
+            const nextDayKey = getLondonDateKey(now);
+            setLondonDayKey((prev) => (prev === nextDayKey ? prev : nextDayKey));
         }, 1000));
 
         return () => timers.forEach(clearInterval);
-    }, [loadData, pollOdds]); // Removed odds from dependencies
+    }, [fetchAvailableMarkets, loadData, pollOdds, selectedDate.ranges]);
 
     // Whale tracking
     const handleNewTrade = useCallback((trade: WhaleTrade) => {
         setRealtimeTrades(prev => [trade, ...prev].slice(0, 10));
     }, []);
 
-    const { isConnected: wsConnected } = useWhaleTracker({
+    useWhaleTracker({
         walletAddress: WHALE_ADDRESS,
         onTrade: handleNewTrade,
         enabled: true,
     });
 
     // Strategy
-    const forecast = weather?.forecastHigh ? Math.round(weather.forecastHigh) : null;
-    const range = forecast ? selectedDate.ranges.find(r => r.label.includes(forecast.toString())) : null;
+    const forecastVal = weather?.avgMax ?? weather?.forecastHigh;
+    const forecast = (forecastVal !== null && forecastVal !== undefined) ? Math.round(forecastVal) : null;
+    const range = (forecast !== null && selectedDate.ranges) ? selectedDate.ranges.find(r => {
+        const label = r.label.toLowerCase();
+        // Match exact degree (e.g., "10C", "10°C") or range "10-11"
+        return label.includes(`${forecast}°c`) ||
+            label.includes(`${forecast}c`) ||
+            (label.includes('or higher') && forecast >= parseInt(label)) ||
+            (label.includes('or below') && forecast <= parseInt(label));
+    }) : null;
     const currentOdds = range ? odds[range.label] : null;
-    const confidence = weather && historical ?
-        Math.abs((weather.forecastHigh || 0) - (historical.stats.avg || 0)) <= 1 ? 85 :
-            Math.abs((weather.forecastHigh || 0) - (historical.stats.avg || 0)) <= 2 ? 65 : 40 : 0;
+
+    const confidence = (weather && historical && (weather.avgMax || weather.forecastHigh)) ?
+        Math.abs((weather.avgMax || weather.forecastHigh || 0) - (historical.stats.avg || 0)) <= 1 ? 85 :
+            Math.abs((weather.avgMax || weather.forecastHigh || 0) - (historical.stats.avg || 0)) <= 2 ? 65 : 40 : 0;
     const londonTimeParts = getLondonTimeParts(londonNow);
     const londonMinutes = londonTimeParts.hour * 60 + londonTimeParts.minute;
     const averagePeakMinutes = peakTimes?.averageMinutes ?? null;
@@ -449,6 +540,9 @@ export default function LondonWeatherPage() {
     const opportunitySignal = peakWindowPassed && oddsBelow90;
     const londonTimeLabel = formatLondonTime(londonNow);
     const deadlineLondonLabel = `${selectedDate.date} 23:59`;
+    const formattedVolume = selectedDate.volume > 0
+        ? new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(selectedDate.volume)
+        : '--';
 
     const formatWhaleSignal = (trade: { side?: string; outcome?: string; price?: number; size?: number; title?: string }) => {
         const match = trade.title?.match(/(\d+)°C/);
@@ -484,7 +578,8 @@ export default function LondonWeatherPage() {
                     {/* Stats */}
                     <div className="flex items-center gap-4 text-sm">
                         <div><span className="text-[var(--text-muted)]">当前:</span> <span className="font-mono font-bold">{weather?.current?.temperature?.toFixed(1) || '--'}°C</span></div>
-                        <div><span className="text-[var(--text-muted)]">预测:</span> <span className="font-mono font-bold text-[var(--primary)]">{weather?.forecastHigh?.toFixed(1) || '--'}°C</span></div>
+                        <div><span className="text-[var(--text-muted)]">预测:</span> <span className="font-mono font-bold">{weather?.forecastHigh?.toFixed(1) || '--'}°C</span></div>
+                        <div><span className="text-[var(--text-muted)] text-[var(--primary)] font-bold">平均预测:</span> <span className="font-mono font-bold text-[var(--primary)]">{weather?.avgMax?.toFixed(1) || '--'}°C</span></div>
                         <div><span className="text-[var(--text-muted)]">历史均值:</span> <span className="font-mono">{historical?.stats.avg?.toFixed(1) || '--'}°C</span></div>
                         <Badge variant={confidence >= 70 ? 'success' : confidence >= 50 ? 'warning' : 'danger'}>{confidence}%</Badge>
                     </div>
@@ -492,24 +587,45 @@ export default function LondonWeatherPage() {
 
                 {/* Date Picker */}
                 <div className="flex bg-[var(--bg-surface)] p-1 rounded-lg border border-[var(--border-subtle)] overflow-x-auto whitespace-nowrap max-w-[400px]">
-                    {availableMarkets.map((m) => (
-                        <button
-                            key={m.date}
-                            onClick={() => {
-                                setSelectedDate(m);
-                                setLoading(true); // Trigger reload
-                            }}
-                            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${selectedDate.date === m.date
-                                ? 'bg-[var(--primary)] text-white shadow-lg'
-                                : 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-hover)]'
-                                }`}
-                        >
-                            {m.date}
-                        </button>
-                    ))}
+                    {isMarketsLoading ? (
+                        <div className="flex gap-2 px-2">
+                            <div className="h-8 w-16 bg-[var(--bg-hover)] rounded-md animate-pulse" />
+                            <div className="h-8 w-16 bg-[var(--bg-hover)] rounded-md animate-pulse" />
+                            <div className="h-8 w-16 bg-[var(--bg-hover)] rounded-md animate-pulse" />
+                        </div>
+                    ) : (
+                        availableMarkets.map((m) => (
+                            <button
+                                key={m.eventSlug}
+                                onClick={() => {
+                                    setSelectedDate(m);
+                                    // setLoading(true); // Trigger reload
+                                }}
+                                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${selectedDate.date === m.date
+                                    ? 'bg-[var(--primary)] text-white shadow-lg'
+                                    : 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-hover)]'
+                                    }`}
+                            >
+                                {m.date}
+                            </button>
+                        ))
+                    )}
                 </div>
 
-                <a href={`https://polymarket.com/event/${selectedDate.eventSlug}`} target="_blank" rel="noopener noreferrer"
+                <div className="flex flex-col items-end gap-1">
+                    <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">成交量</span>
+                    <span className="font-mono font-bold text-sm">{formattedVolume === '--' ? '--' : `$${formattedVolume}`}</span>
+                    <a
+                        href={selectedDate.eventUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-[var(--text-muted)] hover:text-[var(--primary)] transition-colors"
+                    >
+                        官网链接 ↗
+                    </a>
+                </div>
+
+                <a href={selectedDate.eventUrl} target="_blank" rel="noopener noreferrer"
                     className="px-4 py-2 rounded bg-[var(--primary)] text-white font-medium hover:opacity-90">
                     Polymarket 交易
                 </a>
@@ -522,18 +638,20 @@ export default function LondonWeatherPage() {
                     <Card variant="elevated">
                         <CardHeader title="多源预报" subtitle="当日最高温预测" />
                         <div className="p-3 pt-0 space-y-2">
-                            {WEATHER_SOURCES.map((src, i) => (
-                                <a key={i} href={src.url} target="_blank" rel="noopener noreferrer"
-                                    className="flex items-center justify-between p-2 rounded bg-[var(--bg-base)] hover:bg-[var(--bg-hover)] text-sm">
-                                    <div>
-                                        <span className="font-medium">{src.name}</span>
-                                        <span className="text-xs text-[var(--text-muted)] ml-2">{src.model}</span>
+                            {(weather?.models?.length ? weather.models : FALLBACK_WEATHER_SOURCES).map((src: { name: string; model?: string; temp?: number | null; max?: number | null }, i: number) => {
+                                const temp = src.max !== undefined ? src.max : src.temp;
+                                return (
+                                    <div key={i} className="flex items-center justify-between p-2 rounded bg-[var(--bg-base)] text-sm">
+                                        <div>
+                                            <span className="font-medium">{src.name}</span>
+                                            <span className="text-xs text-[var(--text-muted)] ml-2">{src.model || 'API'}</span>
+                                        </div>
+                                        <span className={`font-mono font-bold ${temp ? 'text-[var(--primary)]' : 'text-[var(--text-muted)]'}`}>
+                                            {temp ? `${temp.toFixed(1)}°C` : '--°C'}
+                                        </span>
                                     </div>
-                                    <span className={`font-mono font-bold ${src.temp ? 'text-[var(--primary)]' : 'text-[var(--text-muted)]'}`}>
-                                        {src.temp ? `${src.temp.toFixed(1)}°C` : '查看'}
-                                    </span>
-                                </a>
-                            ))}
+                                );
+                            })}
                         </div>
                     </Card>
 
@@ -670,9 +788,9 @@ export default function LondonWeatherPage() {
                                 </div>
 
                                 <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1">
-                                    {(realtimeTrades.length > 0 ? realtimeTrades : whaleData?.recentTrades || []).map((trade: any, i) => {
+                                    {(realtimeTrades.length > 0 ? realtimeTrades : whaleData?.recentTrades || []).map((trade, i) => {
                                         const signal = formatWhaleSignal(trade);
-                                        const dateLabel = trade.timestamp ? new Date(trade.timestamp).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }).toLowerCase() : 'recently';
+                                        // const dateLabel = trade.timestamp ? new Date(trade.timestamp).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }).toLowerCase() : 'recently';
 
                                         return (
                                             <div key={i} className="flex gap-3 text-xs leading-tight">
@@ -682,7 +800,7 @@ export default function LondonWeatherPage() {
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex justify-between items-start mb-0.5">
                                                         <span className="font-bold">{trade.side || 'Buy'}</span>
-                                                        <span className="font-bold">${trade.size?.toLocaleString() || trade.amount || '0.00'}</span>
+                                                        <span className="font-bold">${trade.size?.toLocaleString() || signal.amount || '0.00'}</span>
                                                     </div>
                                                     <p className="text-[var(--text-muted)] truncate mb-1">
                                                         {trade.market || trade.title || `Will the highest temperature be ${signal.action}?`}
@@ -751,19 +869,37 @@ export default function LondonWeatherPage() {
 
                     {/* Unified Odds Chart */}
                     <Card variant="elevated">
-                        <CardHeader title="赔率走势图" subtitle="所有温度区间对比" />
+                        <CardHeader
+                            title="赔率走势图"
+                            subtitle="所有温度区间对比"
+                            action={isChartLoading && <div className="text-xs text-[var(--primary)] animate-pulse">加载中...</div>}
+                        />
                         <div className="p-3 pt-0">
-                            <div className="relative">
-                                <canvas ref={canvasRef} width={700} height={200} className="w-full rounded bg-[var(--bg-base)]" />
-                                {/* Legend */}
-                                <div className="flex flex-wrap gap-3 mt-3 justify-center">
-                                    {selectedDate.ranges.map(r => (
-                                        <div key={r.label} className="flex items-center gap-1 text-xs">
-                                            <div className="w-3 h-3 rounded" style={{ backgroundColor: r.color }} />
-                                            <span>{r.label}</span>
-                                            <span className="font-mono text-[var(--text-muted)]">{((odds[r.label] || 0) * 100).toFixed(1)}%</span>
+                            <div className="relative h-[250px] w-full mt-2">
+                                {isChartLoading && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-[var(--bg-base)] bg-opacity-70 z-10 rounded">
+                                        <div className="flex flex-col items-center gap-2">
+                                            <div className="w-6 h-6 rounded-full border-2 border-[var(--primary)] border-t-transparent animate-spin" />
+                                            <span className="text-xs text-[var(--text-muted)]">同步赔率...</span>
                                         </div>
-                                    ))}
+                                    </div>
+                                )}
+                                <canvas ref={canvasRef} width={800} height={250} className="w-full h-full rounded bg-[var(--bg-base)]" />
+                            </div>
+                            {/* Legend */}
+                            <div className="flex flex-wrap gap-3 mt-3 justify-center">
+                                {selectedDate.ranges.map(r => (
+                                    <div key={r.label} className="flex items-center gap-1 text-xs">
+                                        <div className="w-2 h-2 rounded" style={{ backgroundColor: r.color }} />
+                                        <span>{r.label}</span>
+                                        <span className="font-mono text-[var(--text-muted)]">{((odds[r.label] || 0) * 100).toFixed(1)}%</span>
+                                    </div>
+                                ))}
+                                {/* Temperature indicator */}
+                                <div className="flex items-center gap-1 text-xs border-l border-[var(--border-subtle)] pl-3">
+                                    <div className="w-6 h-0 border-t-2 border-dashed border-white" />
+                                    <span>预测温度</span>
+                                    <span className="font-mono text-[var(--text-muted)]">{weather?.avgMax?.toFixed(1) || weather?.forecastHigh?.toFixed(1) || '--'}°C</span>
                                 </div>
                             </div>
                         </div>

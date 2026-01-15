@@ -13,6 +13,7 @@ export interface WhaleTrade {
     size: number;
     timestamp: Date;
     market?: string;
+    title?: string;
     assetId?: string;
 }
 
@@ -23,7 +24,7 @@ interface UseWhaleTrackerOptions {
     pollInterval?: number; // Default 500ms
 }
 
-const GAMMA_API = 'https://gamma-api.polymarket.com';
+// const GAMMA_API = 'https://gamma-api.polymarket.com';
 
 export function useWhaleTracker({
     walletAddress,
@@ -90,23 +91,29 @@ export function useWhaleTracker({
         }
     }, [walletAddress, enabled]);
 
+    // Separate effect for connection status management based on 'enabled'
     useEffect(() => {
-        if (!enabled) {
-            setIsConnected(false);
-            return;
+        if (!enabled && isConnected) {
+            const timeout = setTimeout(() => setIsConnected(false), 0);
+            return () => clearTimeout(timeout);
         }
+    }, [enabled, isConnected]);
+
+    useEffect(() => {
+        if (!enabled) return;
 
         console.log(`[WhaleTracker] Starting fast polling (${pollInterval}ms) for ${walletAddress}`);
 
         // Initial poll
-        pollTrades();
+        const timeout = setTimeout(() => pollTrades(), 0);
 
         // Set up fast polling
-        pollIntervalRef.current = setInterval(pollTrades, pollInterval);
+        const timer = setInterval(pollTrades, pollInterval);
+        pollIntervalRef.current = timer;
 
         return () => {
-            if (pollIntervalRef.current) {
-                clearInterval(pollIntervalRef.current);
+            if (timer) {
+                clearInterval(timer);
             }
         };
     }, [pollTrades, pollInterval, enabled, walletAddress]);

@@ -324,9 +324,9 @@ export default function WhaleProfilePage() {
                             <div className="p-4 rounded bg-[var(--accent-muted)] border border-[var(--accent)]">
                                 <h4 className="font-medium text-[var(--accent)] mb-2">核心交易哲学</h4>
                                 <ul className="space-y-2 text-sm">
-                                    <li>• <strong>低风险优先</strong>: 主要买入高确信度的"No"合约(价格88-99¢)</li>
+                                    <li>• <strong>低风险优先</strong>: 主要买入高确信度的&quot;No&quot;合约(价格88-99¢)</li>
                                     <li>• <strong>专注单一市场</strong>: 只交易 London 天气,深度理解市场</li>
-                                    <li>• <strong>极端温度套利</strong>: 在不太可能的温度上押注"不会发生"</li>
+                                    <li>• <strong>极端温度套利</strong>: 在不太可能的温度上押注&quot;不会发生&quot;</li>
                                     <li>• <strong>资金管理</strong>: 单笔交易$100-2500,分散风险</li>
                                     <li>• <strong>及时了结</strong>: 不贪,价格有利时卖出锁定利润</li>
                                 </ul>
@@ -348,8 +348,8 @@ export default function WhaleProfilePage() {
                                 <div
                                     key={i}
                                     className={`p-3 rounded text-sm ${trade.side === 'BUY'
-                                            ? 'bg-[var(--success-muted)]'
-                                            : 'bg-[var(--danger-muted)]'
+                                        ? 'bg-[var(--success-muted)]'
+                                        : 'bg-[var(--danger-muted)]'
                                         }`}
                                 >
                                     <div className="flex items-center justify-between mb-1">

@@ -24,17 +24,19 @@ export function PriceDisplay({
     className = '',
 }: PriceDisplayProps) {
     const [flashClass, setFlashClass] = useState('');
-    const prevValueRef = useRef<number>(value);
+    const [lastValue, setLastValue] = useState(value);
+
+    if (value !== lastValue) {
+        setLastValue(value);
+        setFlashClass(value > lastValue ? 'flash-up' : 'flash-down');
+    }
 
     useEffect(() => {
-        if (value !== prevValueRef.current) {
-            const isUp = value > prevValueRef.current;
-            setFlashClass(isUp ? 'flash-up' : 'flash-down');
+        if (flashClass) {
             const timer = setTimeout(() => setFlashClass(''), 500);
-            prevValueRef.current = value;
             return () => clearTimeout(timer);
         }
-    }, [value]);
+    }, [flashClass]);
 
     const change = previousValue !== undefined ? value - previousValue : 0;
     const changePercent = previousValue && previousValue !== 0

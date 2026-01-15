@@ -6,25 +6,33 @@ import { useRouter } from 'next/navigation';
 
 const traders = [
     {
-        name: 'Neobrother',
-        address: '0x6297b93ea37ff92a57fd636410f3b71ebf74517e',
-        href: '/neobrother',
-        strategy: '低价抄底 + 高频卖出',
-        focus: '天气市场 98%+',
-        stats: { winRate: '~70%', avgProfit: '+7.7%', holdRate: '40%' }
+        name: 'duderr 🐋',
+        address: '0x8f7a4b414417911e7e9bd738399874792cdbdb40',
+        href: '/terminal/0x8f7a4b414417911e7e9bd738399874792cdbdb40',
+        strategy: '事件驱动重仓 + 信息优势',
+        focus: '文化市场 80%',
+        stats: { winRate: '—', avgProfit: '+$128k', holdRate: '高' }
     },
     {
-        name: '0xaa7a',
-        address: '0xaa7a74b8c754e8aacc1ac2dedb699af0a3224d23',
-        href: '/trader/0xaa7a74b8c754e8aacc1ac2dedb699af0a3224d23',
-        strategy: '中价建仓 + 持有到期',
-        focus: '天气市场 94%',
-        stats: { winRate: '~60%', avgProfit: '+35.8%', holdRate: '74%' }
+        name: '0xac24 🤖',
+        address: '0xac2474546159e1349c57514d879732793db3941c',
+        href: '/terminal/0xac2474546159e1349c57514d879732793db3941c',
+        strategy: '高频套利 (HFT)',
+        focus: '美联储/宏观 90%+',
+        stats: { winRate: '高', avgProfit: '+$210M Vol', holdRate: '极少' }
+    },
+    {
+        name: '0x57ee 🌦️',
+        address: '0x57ee70867b4e387de9de34fd62bc685aa02a8112',
+        href: '/terminal/0x57ee70867b4e387de9de34fd62bc685aa02a8112',
+        strategy: '气象数据狙击',
+        focus: '纽约/伦敦天气 97%',
+        stats: { winRate: '~90%', avgProfit: '+$91k', holdRate: '100%' }
     },
     {
         name: 'SB911 🔥',
         address: '0xca6e9879b0a83eb471f974e159f2483c08b546f2',
-        href: '/trader/0xca6e9879b0a83eb471f974e159f2483c08b546f2',
+        href: '/terminal/0xca6e9879b0a83eb471f974e159f2483c08b546f2',
         strategy: '推文套利 + 地缘押注',
         focus: 'Elon推文 94%',
         stats: { winRate: '—', avgProfit: '+$100k', holdRate: '—' }
@@ -214,20 +222,28 @@ export default function TradersPage() {
                         </thead>
                         <tbody className="text-slate-300">
                             <tr className="border-b border-slate-800/50">
-                                <td className="py-3 px-4 font-bold">Neobrother</td>
-                                <td className="py-3 px-4">低价抄底 + 高频</td>
-                                <td className="py-3 px-4 font-mono text-yellow-400">12.5%</td>
-                                <td className="py-3 px-4 font-mono text-emerald-400">20.2%</td>
-                                <td className="py-3 px-4 font-mono text-emerald-400">+7.7%</td>
-                                <td className="py-3 px-4 font-mono">40%</td>
+                                <td className="py-3 px-4 font-bold">duderr</td>
+                                <td className="py-3 px-4">事件重仓</td>
+                                <td className="py-3 px-4 font-mono text-yellow-400">Taker</td>
+                                <td className="py-3 px-4 font-mono text-emerald-400">0.99</td>
+                                <td className="py-3 px-4 font-mono text-emerald-400">+$128k</td>
+                                <td className="py-3 px-4 font-mono">100%</td>
+                            </tr>
+                            <tr className="border-b border-slate-800/50">
+                                <td className="py-3 px-4 font-bold">0xac24</td>
+                                <td className="py-3 px-4">HFT 算法</td>
+                                <td className="py-3 px-4 font-mono text-yellow-400">HFT</td>
+                                <td className="py-3 px-4 font-mono text-emerald-400">HFT</td>
+                                <td className="py-3 px-4 font-mono text-emerald-400">+$210M Vol</td>
+                                <td className="py-3 px-4 font-mono">0%</td>
                             </tr>
                             <tr>
-                                <td className="py-3 px-4 font-bold">0xaa7a</td>
-                                <td className="py-3 px-4">中价建仓 + 持有</td>
-                                <td className="py-3 px-4 font-mono text-yellow-400">24.4%</td>
-                                <td className="py-3 px-4 font-mono text-emerald-400">60.2%</td>
-                                <td className="py-3 px-4 font-mono text-emerald-400">+35.8%</td>
-                                <td className="py-3 px-4 font-mono">74%</td>
+                                <td className="py-3 px-4 font-bold">0x57ee</td>
+                                <td className="py-3 px-4">气象狙击</td>
+                                <td className="py-3 px-4 font-mono text-yellow-400">3.4%</td>
+                                <td className="py-3 px-4 font-mono text-emerald-400">100%</td>
+                                <td className="py-3 px-4 font-mono text-emerald-400">+$91k</td>
+                                <td className="py-3 px-4 font-mono">100%</td>
                             </tr>
                         </tbody>
                     </table>

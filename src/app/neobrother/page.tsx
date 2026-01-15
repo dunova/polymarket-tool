@@ -10,12 +10,12 @@ import {
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
 // 自定义Tooltip组件确保文字颜色正确
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { name: string; value: string | number }[]; label?: string }) => {
     if (active && payload && payload.length) {
         return (
             <div className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 shadow-xl">
                 <p className="text-white text-xs font-bold">{label}</p>
-                {payload.map((p: any, i: number) => (
+                {payload.map((p: { name: string; value: string | number }, i: number) => (
                     <p key={i} className="text-slate-300 text-xs">
                         {p.name}: <span className="text-white font-mono">{p.value}</span>
                     </p>
@@ -26,7 +26,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     return null;
 };
 
-const ScatterTooltip = ({ active, payload }: any) => {
+const ScatterTooltip = ({ active, payload }: { active?: boolean; payload?: { payload: { city: string; x: number; y: number; size: number } }[] }) => {
     if (active && payload && payload.length) {
         const d = payload[0].payload;
         return (
@@ -41,8 +41,52 @@ const ScatterTooltip = ({ active, payload }: any) => {
     return null;
 };
 
+interface Trade {
+    city: string;
+    tradeHour: number;
+    price: number;
+    usdcSize: number;
+    side: 'BUY' | 'SELL';
+    tradeTime: string;
+    threshold?: { temp: number; unit: string; condition: string };
+    tempAtTradeHour?: number;
+    peakHour?: number;
+    enteredAfterPeak?: boolean;
+}
+
+interface Pattern {
+    matches: number;
+    total: number;
+    rate: number;
+}
+
+interface NeobrotherData {
+    summary: {
+        totalTrades: number;
+        uniqueCities: number;
+        totalVolume: number;
+        uniqueMarkets: number;
+    };
+    tradeLog: Trade[];
+    patterns: Record<string, Pattern>;
+    cityStats: Record<string, { trades: number; volume: number }>;
+    hourDistribution: number[];
+    priceBuckets: Array<{ range: string; count: number }>;
+    buySellPatterns?: {
+        batchBuyRate: number;
+        holdToExpiryRate: number;
+        earlyExitRate: number;
+        profitSpread: number;
+        avgBatchIntervalMins: number;
+        avgBuyPrice: number;
+        totalBuys: number;
+        totalEvents: number;
+        avgSellPrice: number;
+    };
+}
+
 export default function NeobrotherPatternDiscovery() {
-    const [data, setData] = useState<any>(null);
+    const [data, setData] = useState<NeobrotherData | null>(null);
     const [loading, setLoading] = useState(true);
     const [cityFilter, setCityFilter] = useState<string>('all');
     const [sideFilter, setSideFilter] = useState<string>('all');
@@ -58,7 +102,7 @@ export default function NeobrotherPatternDiscovery() {
 
     const filteredTrades = useMemo(() => {
         if (!data?.tradeLog) return [];
-        return data.tradeLog.filter((t: any) => {
+        return data.tradeLog.filter((t: Trade) => {
             if (cityFilter !== 'all' && t.city !== cityFilter) return false;
             if (sideFilter !== 'all' && t.side !== sideFilter) return false;
             return true;
@@ -72,9 +116,11 @@ export default function NeobrotherPatternDiscovery() {
         </div>
     );
 
+    if (!data) return null;
+
     const { summary, patterns, cityStats, hourDistribution, priceBuckets } = data;
 
-    const cityChartData = Object.entries(cityStats).map(([city, stats]: [string, any]) => ({
+    const cityChartData = Object.entries(cityStats).map(([city, stats]: [string, { trades: number; volume: number }]) => ({
         city, trades: stats.trades, volume: Math.round(stats.volume)
     })).sort((a, b) => b.trades - a.trades);
 
@@ -82,7 +128,7 @@ export default function NeobrotherPatternDiscovery() {
         hour: `${hour.toString().padStart(2, '0')}:00`, count
     }));
 
-    const scatterData = filteredTrades.map((t: any) => ({
+    const scatterData = filteredTrades.map((t: Trade) => ({
         x: t.tradeHour, y: t.price, size: t.usdcSize, city: t.city, side: t.side
     }));
 
@@ -151,7 +197,7 @@ export default function NeobrotherPatternDiscovery() {
                     {/* 核心策略 */}
                     <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800">
                         <h3 className="text-lg font-bold text-emerald-400 mb-4 flex items-center gap-2">
-                            <span className="text-2xl">🎯</span> 核心策略：气象市场"确定性收割"
+                            <span className="text-2xl">🎯</span> 核心策略：气象市场&quot;确定性收割&quot;
                         </h3>
                         <p className="text-slate-300 mb-4">
                             Neobrother 的策略本质是<strong className="text-white">利用气象数据的科学确定性来套利预测市场的认知延迟</strong>。
@@ -159,7 +205,7 @@ export default function NeobrotherPatternDiscovery() {
                         </p>
                         <p className="text-slate-300">
                             与政治或体育预测不同，天气预报具有可量化的准确率。ECMWF（欧洲中期天气预报中心）的 24 小时预报准确率高达 95%+，
-                            而普通 Polymarket 用户往往只凭"感觉"下注，造成了巨大的定价偏差。
+                            而普通 Polymarket 用户往往只凭&quot;感觉&quot;下注，造成了巨大的定价偏差。
                         </p>
                     </div>
 
@@ -180,7 +226,7 @@ export default function NeobrotherPatternDiscovery() {
                             <div>
                                 <h4 className="text-sm font-bold text-white mb-2">如何复制</h4>
                                 <p className="text-sm text-slate-300">
-                                    寻找市场严重低估的"长尾事件"。例如：当市场认为"布宜诺斯艾利斯1月13日最高气温35°C"概率只有 2% 时，
+                                    寻找市场严重低估的&quot;长尾事件&quot;。例如：当市场认为&quot;布宜诺斯艾利斯1月13日最高气温35°C&quot;概率只有 2% 时，
                                     查询专业气象模型，若实际概率是 15%，则大量买入。即便只有少数正确，回报率也是 50 倍。
                                 </p>
                             </div>
@@ -204,7 +250,7 @@ export default function NeobrotherPatternDiscovery() {
                             <div>
                                 <h4 className="text-sm font-bold text-white mb-2">如何复制</h4>
                                 <p className="text-sm text-slate-300">
-                                    在气象机构发布最新预报后的 1-2 小时内迅速入场，利用"信息传导延迟"——
+                                    在气象机构发布最新预报后的 1-2 小时内迅速入场，利用&quot;信息传导延迟&quot;——
                                     专业气象数据需要时间被普通用户消化，而市场价格尚未充分反映最新预报。
                                 </p>
                             </div>
@@ -256,7 +302,7 @@ export default function NeobrotherPatternDiscovery() {
                             </div>
                         </div>
                         <p className="text-sm text-slate-300">
-                            <strong className="text-white">如何复制：</strong>采用"蚂蚁雄兵"策略：每笔交易规模小（$10 左右），但覆盖大量市场。
+                            <strong className="text-white">如何复制：</strong>采用&quot;蚂蚁雄兵&quot;策略：每笔交易规模小（$10 左右），但覆盖大量市场。
                             降低单一预测失败风险，利用大数定律确保整体盈利。
                         </p>
                     </div>
@@ -271,19 +317,19 @@ export default function NeobrotherPatternDiscovery() {
                             {/* 核心数据指标 */}
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                                 <div className="bg-slate-900/80 p-4 rounded-xl text-center">
-                                    <div className="text-3xl font-mono text-orange-400 mb-1">{data.buySellPatterns.batchBuyRate}%</div>
+                                    <div className="text-3xl font-mono text-orange-400 mb-1">{data?.buySellPatterns?.batchBuyRate}%</div>
                                     <div className="text-[10px] text-slate-400 uppercase">分批买入率</div>
                                 </div>
                                 <div className="bg-slate-900/80 p-4 rounded-xl text-center">
-                                    <div className="text-3xl font-mono text-emerald-400 mb-1">{data.buySellPatterns.holdToExpiryRate}%</div>
+                                    <div className="text-3xl font-mono text-emerald-400 mb-1">{data?.buySellPatterns?.holdToExpiryRate}%</div>
                                     <div className="text-[10px] text-slate-400 uppercase">持有到期率</div>
                                 </div>
                                 <div className="bg-slate-900/80 p-4 rounded-xl text-center">
-                                    <div className="text-3xl font-mono text-blue-400 mb-1">{data.buySellPatterns.earlyExitRate}%</div>
+                                    <div className="text-3xl font-mono text-blue-400 mb-1">{data?.buySellPatterns?.earlyExitRate}%</div>
                                     <div className="text-[10px] text-slate-400 uppercase">提前卖出率</div>
                                 </div>
                                 <div className="bg-slate-900/80 p-4 rounded-xl text-center">
-                                    <div className="text-3xl font-mono text-purple-400 mb-1">+{data.buySellPatterns.profitSpread}%</div>
+                                    <div className="text-3xl font-mono text-purple-400 mb-1">+{data?.buySellPatterns?.profitSpread}%</div>
                                     <div className="text-[10px] text-slate-400 uppercase">买卖价差</div>
                                 </div>
                             </div>
@@ -338,11 +384,11 @@ export default function NeobrotherPatternDiscovery() {
                                 <p className="text-sm text-slate-300 leading-relaxed">
                                     <strong className="text-orange-400">答案：不一定。</strong> 数据显示他的策略核心是<strong className="text-white">买入极低赔率（12.5%）的长尾事件</strong>，
                                     然后<strong className="text-white">持有到期（40%）</strong>或在价格上涨后<strong className="text-white">提前卖出锁定利润（54%）</strong>。
-                                    他的买卖价差是 <strong className="text-emerald-400">+{data.buySellPatterns.profitSpread}%</strong>，说明即使不看天气预报，
+                                    他的买卖价差是 <strong className="text-emerald-400">+{data?.buySellPatterns?.profitSpread}%</strong>，说明即使不看天气预报，
                                     只要你系统性地买入所有低于 15% 赔率的极端天气选项，然后在价格涨到 20%+ 时卖出，就能复制这个策略。
                                     <br /><br />
-                                    <strong className="text-white">但天气预报可以提高胜率。</strong>如果你能判断某个"2% 概率"的极端温度实际有 15% 的可能，
-                                    你的 EV（期望值）就会大幅提升。他的 72% 分批买入率表明他确实在追踪某些信号来加仓。
+                                    <strong className="text-white">但天气预报可以提高胜率。</strong>如果你能判断某个&quot;2% 概率&quot;的极端温度实际有 15% 的可能，
+                                    你的 EV（期望值）就会大幅提升。他的 72% 分批买入率表明 he 确实在追踪某些信号来加仓。
                                 </p>
                             </div>
                         </div>
@@ -558,7 +604,7 @@ export default function NeobrotherPatternDiscovery() {
                         { ...patterns.highProbEntry, nameCN: '高概率入场', descCN: '入场价格在0.85以上（近乎确定的结果）' },
                         { ...patterns.lowProbEntry, nameCN: '低价抄底', descCN: '入场价格在0.15以下（高风险/低估）' },
                         { ...patterns.buyDominance, nameCN: '买入主导', descCN: '买入与卖出交易的比例' },
-                    ].map((p: any, i) => (
+                    ].map((p, i) => (
                         <div key={i} className="bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 p-6 rounded-2xl">
                             <div className="flex justify-between items-start mb-4">
                                 <span className="text-[9px] uppercase text-slate-400 font-bold tracking-widest">{p.nameCN}</span>
@@ -697,7 +743,7 @@ export default function NeobrotherPatternDiscovery() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredTrades.slice(0, 50).map((t: any, i: number) => (
+                                {filteredTrades.slice(0, 50).map((t: Trade, i: number) => (
                                     <tr key={i} className="border-b border-slate-900 hover:bg-slate-800/30 transition-colors">
                                         <td className="py-3 px-2 font-mono text-slate-300">{new Date(t.tradeTime).toLocaleString('zh-CN', { hour12: false })}</td>
                                         <td className="py-3 px-2 text-slate-300">{cityNamesCN[t.city] || t.city}</td>

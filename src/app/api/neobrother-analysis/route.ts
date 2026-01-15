@@ -53,8 +53,28 @@ function parseTargetDate(title: string, slug: string): string | null {
     return null;
 }
 
+interface EnrichedTrade {
+    id: string;
+    timestamp: number;
+    tradeTime: string;
+    tradeHour: number;
+    city: string;
+    targetDate: string;
+    threshold: { temp: number; unit: 'C' | 'F'; condition: string };
+    side: string;
+    price: number;
+    usdcSize: number;
+    outcome: string;
+    eventSlug: string;
+    peakHour: number | null;
+    peakTemp: number | null;
+    tempAtTradeHour: number | null;
+    enteredAfterPeak: boolean | null;
+    tempProximity: number | null;
+}
+
 // Fetch historical hourly weather for a date/city
-async function fetchWeatherForDate(city: string, date: string): Promise<any> {
+async function fetchWeatherForDate(city: string, date: string): Promise<{ hourly?: { temperature_2m: number[] } } | null> {
     const coord = CITY_COORDS[city];
     if (!coord) return null;
 
@@ -77,10 +97,24 @@ export async function GET() {
         const allTrades = await tradesRes.json();
 
         // Step 2: Parse and enrich each trade
-        const enrichedTrades: any[] = [];
-        const marketCache: Record<string, any> = {}; // Cache weather by date+city
+        const enrichedTrades: EnrichedTrade[] = [];
+        const marketCache: Record<string, { hourly?: { temperature_2m: number[] } } | null> = {}; // Cache weather by date+city
 
-        for (const trade of allTrades) {
+        interface RawTrade {
+            title?: string;
+            slug?: string;
+            timestamp: number;
+            type: string;
+            size: string;
+            price: string;
+            side: string;
+            outcome: string;
+            transactionHash: string;
+            usdcSize: string;
+            eventSlug: string;
+        }
+
+        for (const trade of allTrades as RawTrade[]) {
             const city = parseCity(trade.title || '');
             const threshold = parseThreshold(trade.title || '');
             const targetDate = parseTargetDate(trade.title || '', trade.slug || '');
@@ -206,7 +240,7 @@ export async function GET() {
 
         // ========== BUY-SELL DECISION PATTERNS ==========
         // Group all trades by event
-        const eventAnalysis: Record<string, { buys: any[]; sells: any[]; redeems: any[] }> = {};
+        const eventAnalysis: Record<string, { buys: { time: number; price: number; size: number; outcome: string }[]; sells: { time: number; price: number; size: number; outcome: string }[]; redeems: { time: number; size: number }[] }> = {};
 
         for (const trade of allTrades) {
             const event = trade.eventSlug;
